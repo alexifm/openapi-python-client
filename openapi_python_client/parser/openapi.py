@@ -170,7 +170,7 @@ class Endpoint:
         endpoint = deepcopy(endpoint)
         for code, response_data in data.items():
             response, schemas = response_from_data(
-                status_code=int(code), data=response_data, schemas=schemas, parent_name=endpoint.name
+                status_code=int(200 if code == 'default' else code), data=response_data, schemas=schemas, parent_name=endpoint.name
             )
             if isinstance(response, ParseError):
                 endpoint.errors.append(
