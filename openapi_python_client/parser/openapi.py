@@ -169,6 +169,8 @@ class Endpoint:
     def _add_responses(*, endpoint: "Endpoint", data: oai.Responses, schemas: Schemas) -> Tuple["Endpoint", Schemas]:
         endpoint = deepcopy(endpoint)
         for code, response_data in data.items():
+            if code == "default":
+                continue
 
             status_code: int
             try:
