@@ -17,6 +17,7 @@ from jinja2 import (
     FileSystemLoader,
     PackageLoader,
 )
+from jinja2.exceptions import TemplateNotFound
 
 from openapi_python_client import utils
 
@@ -192,6 +193,9 @@ class Project:
         if self.meta == MetaType.SETUP:
             self._build_setup_py()
 
+        # noxfile.py
+        self._build_noxfile_py()
+
         # README.md
         readme = self.project_dir / "README.md"
         readme_template = self.env.get_template("README.md.jinja")
@@ -225,6 +229,18 @@ class Project:
                 **self.extra_template_kwargs,
             )
         )
+
+    def _build_noxfile_py(self) -> None:
+        template = "noxfile.py.jinja"
+        try:
+            pyproject_template = self.env.get_template(template)
+        except TemplateNotFound:
+            pass
+        else:
+            pyproject_path = self.project_dir / "noxfile.py"
+            pyproject_path.write_text(
+                pyproject_template.render(**self.extra_template_kwargs)
+            )
 
     def _build_setup_py(self) -> None:
         template = self.env.get_template("setup.py.jinja")
