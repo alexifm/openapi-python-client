@@ -10,7 +10,13 @@ from typing import Any, Dict, Optional, Sequence, Union
 import httpcore
 import httpx
 import yaml
-from jinja2 import BaseLoader, ChoiceLoader, Environment, FileSystemLoader, PackageLoader
+from jinja2 import (
+    BaseLoader,
+    ChoiceLoader,
+    Environment,
+    FileSystemLoader,
+    PackageLoader,
+)
 
 from openapi_python_client import utils
 
@@ -18,7 +24,9 @@ from .parser import GeneratorData, import_string_from_reference
 from .parser.errors import GeneratorError
 from .utils import snake_case
 
-if sys.version_info.minor < 8:  # version did not exist before 3.8, need to use a backport
+if (
+    sys.version_info.minor < 8
+):  # version did not exist before 3.8, need to use a backport
     from importlib_metadata import version
 else:
     from importlib.metadata import version  # type: ignore
@@ -45,9 +53,17 @@ class Project:
     package_name_override: Optional[str] = None
     package_version_override: Optional[str] = None
 
-    def __init__(self, *, openapi: GeneratorData, meta: MetaType, custom_template_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        *,
+        openapi: GeneratorData,
+        meta: MetaType,
+        custom_template_path: Optional[Path] = None,
+        extra_template_kwargs: Optional[Dict[str, str]] = None,
+    ) -> None:
         self.openapi: GeneratorData = openapi
         self.meta: MetaType = meta
+        self.extra_template_kwargs = extra_template_kwargs or {}
 
         package_loader = PackageLoader(__package__)
         loader: BaseLoader
@@ -60,14 +76,21 @@ class Project:
             )
         else:
             loader = package_loader
-        self.env: Environment = Environment(loader=loader, trim_blocks=True, lstrip_blocks=True)
+        self.env: Environment = Environment(
+            loader=loader, trim_blocks=True, lstrip_blocks=True
+        )
 
-        self.project_name: str = self.project_name_override or f"{utils.kebab_case(openapi.title).lower()}-client"
+        self.project_name: str = (
+            self.project_name_override
+            or f"{utils.kebab_case(openapi.title).lower()}-client"
+        )
         self.project_dir: Path = Path.cwd()
         if meta != MetaType.NONE:
             self.project_dir /= self.project_name
 
-        self.package_name: str = self.package_name_override or self.project_name.replace("-", "_")
+        self.package_name: str = (
+            self.package_name_override or self.project_name.replace("-", "_")
+        )
         self.package_dir: Path = self.project_dir / self.package_name
         self.package_description: str = utils.remove_string_escapes(
             f"A client library for accessing {self.openapi.title}"
@@ -86,7 +109,11 @@ class Project:
             try:
                 self.project_dir.mkdir()
             except FileExistsError:
-                return [GeneratorError(detail="Directory already exists. Delete it or use the update command.")]
+                return [
+                    GeneratorError(
+                        detail="Directory already exists. Delete it or use the update command."
+                    )
+                ]
         self._create_package()
         self._build_metadata()
         self._build_models()
@@ -122,7 +149,13 @@ class Project:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        subprocess.run("black .", cwd=self.project_dir, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            "black .",
+            cwd=self.project_dir,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
     def _get_errors(self) -> Sequence[GeneratorError]:
         errors = []
@@ -137,7 +170,11 @@ class Project:
         package_init = self.package_dir / "__init__.py"
 
         package_init_template = self.env.get_template("package_init.py.jinja")
-        package_init.write_text(package_init_template.render(description=self.package_description))
+        package_init.write_text(
+            package_init_template.render(
+                description=self.package_description, **self.extra_template_kwargs
+            )
+        )
 
         if self.meta != MetaType.NONE:
             pytyped = self.package_dir / "py.typed"
@@ -145,7 +182,7 @@ class Project:
 
         types_template = self.env.get_template("types.py.jinja")
         types_path = self.package_dir / "types.py"
-        types_path.write_text(types_template.render())
+        types_path.write_text(types_template.render(**self.extra_template_kwargs))
 
     def _build_metadata(self) -> None:
         if self.meta == MetaType.NONE:
@@ -160,17 +197,23 @@ class Project:
         readme_template = self.env.get_template("README.md.jinja")
         readme.write_text(
             readme_template.render(
-                project_name=self.project_name, description=self.package_description, package_name=self.package_name
+                project_name=self.project_name,
+                description=self.package_description,
+                package_name=self.package_name,
             )
         )
 
         # .gitignore
         git_ignore_path = self.project_dir / ".gitignore"
         git_ignore_template = self.env.get_template(".gitignore.jinja")
-        git_ignore_path.write_text(git_ignore_template.render())
+        git_ignore_path.write_text(
+            git_ignore_template.render(**self.extra_template_kwargs)
+        )
 
     def _build_pyproject_toml(self, *, use_poetry: bool) -> None:
-        template = "pyproject.toml.jinja" if use_poetry else "pyproject_no_poetry.toml.jinja"
+        template = (
+            "pyproject.toml.jinja" if use_poetry else "pyproject_no_poetry.toml.jinja"
+        )
         pyproject_template = self.env.get_template(template)
         pyproject_path = self.project_dir / "pyproject.toml"
         pyproject_path.write_text(
@@ -179,6 +222,7 @@ class Project:
                 package_name=self.package_name,
                 version=self.version,
                 description=self.package_description,
+                **self.extra_template_kwargs,
             )
         )
 
@@ -204,7 +248,9 @@ class Project:
         model_template = self.env.get_template("model.py.jinja")
         for model in self.openapi.models.values():
             module_path = models_dir / f"{model.reference.module_name}.py"
-            module_path.write_text(model_template.render(model=model))
+            module_path.write_text(
+                model_template.render(model=model, **self.extra_template_kwargs)
+            )
             imports.append(import_string_from_reference(model.reference))
 
         # Generate enums
@@ -225,7 +271,7 @@ class Project:
         # Generate Client
         client_path = self.package_dir / "client.py"
         client_template = self.env.get_template("client.py.jinja")
-        client_path.write_text(client_template.render())
+        client_path.write_text(client_template.render(**self.extra_template_kwargs))
 
         # Generate endpoints
         api_dir = self.package_dir / "api"
@@ -242,11 +288,19 @@ class Project:
 
             for endpoint in collection.endpoints:
                 module_path = tag_dir / f"{snake_case(endpoint.name)}.py"
-                module_path.write_text(endpoint_template.render(endpoint=endpoint))
+                module_path.write_text(
+                    endpoint_template.render(
+                        endpoint=endpoint, **self.extra_template_kwargs
+                    )
+                )
 
 
 def _get_project_for_url_or_path(
-    url: Optional[str], path: Optional[Path], meta: MetaType, custom_template_path: Optional[Path] = None
+    url: Optional[str],
+    path: Optional[Path],
+    meta: MetaType,
+    custom_template_path: Optional[Path] = None,
+    extra_template_kwargs: Optional[Dict[str, str]] = None,
 ) -> Union[Project, GeneratorError]:
     data_dict = _get_document(url=url, path=path)
     if isinstance(data_dict, GeneratorError):
@@ -254,11 +308,21 @@ def _get_project_for_url_or_path(
     openapi = GeneratorData.from_dict(data_dict)
     if isinstance(openapi, GeneratorError):
         return openapi
-    return Project(openapi=openapi, custom_template_path=custom_template_path, meta=meta)
+    return Project(
+        openapi=openapi,
+        custom_template_path=custom_template_path,
+        meta=meta,
+        extra_template_kwargs=extra_template_kwargs,
+    )
 
 
 def create_new_client(
-    *, url: Optional[str], path: Optional[Path], meta: MetaType, custom_template_path: Optional[Path] = None
+    *,
+    url: Optional[str],
+    path: Optional[Path],
+    meta: MetaType,
+    custom_template_path: Optional[Path] = None,
+    extra_template_kwargs: Optional[Dict[str, str]] = None,
 ) -> Sequence[GeneratorError]:
     """
     Generate the client library
@@ -266,14 +330,25 @@ def create_new_client(
     Returns:
          A list containing any errors encountered when generating.
     """
-    project = _get_project_for_url_or_path(url=url, path=path, custom_template_path=custom_template_path, meta=meta)
+    project = _get_project_for_url_or_path(
+        url=url,
+        path=path,
+        custom_template_path=custom_template_path,
+        meta=meta,
+        extra_template_kwargs=extra_template_kwargs,
+    )
     if isinstance(project, GeneratorError):
         return [project]
     return project.build()
 
 
 def update_existing_client(
-    *, url: Optional[str], path: Optional[Path], meta: MetaType, custom_template_path: Optional[Path] = None
+    *,
+    url: Optional[str],
+    path: Optional[Path],
+    meta: MetaType,
+    custom_template_path: Optional[Path] = None,
+    extra_template_kwargs: Optional[Dict[str, str]] = None,
 ) -> Sequence[GeneratorError]:
     """
     Update an existing client library
@@ -281,13 +356,21 @@ def update_existing_client(
     Returns:
          A list containing any errors encountered when generating.
     """
-    project = _get_project_for_url_or_path(url=url, path=path, custom_template_path=custom_template_path, meta=meta)
+    project = _get_project_for_url_or_path(
+        url=url,
+        path=path,
+        custom_template_path=custom_template_path,
+        meta=meta,
+        extra_template_kwargs=extra_template_kwargs,
+    )
     if isinstance(project, GeneratorError):
         return [project]
     return project.update()
 
 
-def _get_document(*, url: Optional[str], path: Optional[Path]) -> Union[Dict[str, Any], GeneratorError]:
+def _get_document(
+    *, url: Optional[str], path: Optional[Path]
+) -> Union[Dict[str, Any], GeneratorError]:
     yaml_bytes: bytes
     if url is not None and path is not None:
         return GeneratorError(header="Provide URL or Path, not both.")
@@ -296,7 +379,9 @@ def _get_document(*, url: Optional[str], path: Optional[Path]) -> Union[Dict[str
             response = httpx.get(url)
             yaml_bytes = response.content
         except (httpx.HTTPError, httpcore.NetworkError):
-            return GeneratorError(header="Could not get OpenAPI document from provided URL")
+            return GeneratorError(
+                header="Could not get OpenAPI document from provided URL"
+            )
     elif path is not None:
         yaml_bytes = path.read_bytes()
     else:

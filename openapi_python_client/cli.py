@@ -1,6 +1,6 @@
 import pathlib
 from pprint import pformat
-from typing import Optional, Sequence
+from typing import Optional, Dict, List, Sequence
 
 import typer
 
@@ -33,7 +33,12 @@ def _process_config(path: Optional[pathlib.Path]) -> None:
 # noinspection PyUnusedLocal
 @app.callback(name="openapi-python-client")
 def cli(
-    version: bool = typer.Option(False, "--version", callback=_version_callback, help="Print the version and exit"),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        help="Print the version and exit",
+    ),
     config: Optional[pathlib.Path] = typer.Option(
         None, callback=_process_config, help="Path to the config file to use"
     ),
@@ -84,7 +89,8 @@ def handle_errors(errors: Sequence[GeneratorError]) -> None:
         _print_parser_error(err, color)
 
     gh_link = typer.style(
-        "https://github.com/triaxtec/openapi-python-client/issues/new/choose", fg=typer.colors.BRIGHT_BLUE
+        "https://github.com/triaxtec/openapi-python-client/issues/new/choose",
+        fg=typer.colors.BRIGHT_BLUE,
     )
     typer.secho(
         f"If you believe this was a mistake or this tool is missing a feature you need, "
@@ -111,12 +117,18 @@ _meta_option = typer.Option(
 )
 
 
+def _parse_extra_template_kwargs(extra_template_kwargs: List[str]) -> Dict[str, str]:
+    out = {k: v for k, v in map(lambda s: s.split("="), extra_template_kwargs)}
+    return out
+
+
 @app.command()
 def generate(
     url: Optional[str] = typer.Option(None, help="A URL to read the JSON from"),
     path: Optional[pathlib.Path] = typer.Option(None, help="A path to the JSON file"),
     custom_template_path: Optional[pathlib.Path] = typer.Option(None, **custom_template_path_options),  # type: ignore
     meta: MetaType = _meta_option,
+    extra_template_kwargs: Optional[List[str]] = typer.Option(None),
 ) -> None:
     """ Generate a new OpenAPI Client library """
     from . import create_new_client
@@ -127,7 +139,17 @@ def generate(
     if url and path:
         typer.secho("Provide either --url or --path, not both", fg=typer.colors.RED)
         raise typer.Exit(code=1)
-    errors = create_new_client(url=url, path=path, meta=meta, custom_template_path=custom_template_path)
+
+    if extra_template_kwargs is not None:
+        extra_tpl_kwargs = _parse_extra_template_kwargs(extra_template_kwargs)
+
+    errors = create_new_client(
+        url=url,
+        path=path,
+        meta=meta,
+        custom_template_path=custom_template_path,
+        extra_template_kwargs=extra_tpl_kwargs,
+    )
     handle_errors(errors)
 
 
@@ -137,6 +159,7 @@ def update(
     path: Optional[pathlib.Path] = typer.Option(None, help="A path to the JSON file"),
     custom_template_path: Optional[pathlib.Path] = typer.Option(None, **custom_template_path_options),  # type: ignore
     meta: MetaType = _meta_option,
+    extra_template_kwargs: Optional[List[str]] = typer.Option(None),
 ) -> None:
     """ Update an existing OpenAPI Client library """
     from . import update_existing_client
@@ -148,5 +171,14 @@ def update(
         typer.secho("Provide either --url or --path, not both", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    errors = update_existing_client(url=url, path=path, meta=meta, custom_template_path=custom_template_path)
+    if extra_template_kwargs is not None:
+        extra_tpl_kwargs = _parse_extra_template_kwargs(extra_template_kwargs)
+
+    errors = update_existing_client(
+        url=url,
+        path=path,
+        meta=meta,
+        custom_template_path=custom_template_path,
+        extra_template_kwargs=extra_tpl_kwargs,
+    )
     handle_errors(errors)
