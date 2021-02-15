@@ -27,11 +27,17 @@ class Property:
     default: Optional[str] = attr.ib()
     python_name: str = attr.ib(init=False)
 
+    description: Optional[str]
+
     template: ClassVar[Optional[str]] = None
     json_is_dict: ClassVar[bool] = False
 
     def __attrs_post_init__(self) -> None:
-        object.__setattr__(self, "python_name", utils.to_valid_python_identifier(utils.snake_case(self.name)))
+        object.__setattr__(
+            self,
+            "python_name",
+            utils.to_valid_python_identifier(utils.snake_case(self.name)),
+        )
 
     def get_type_string(self, no_optional: bool = False) -> str:
         """

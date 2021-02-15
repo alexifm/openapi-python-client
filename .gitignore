@@ -28,3 +28,12 @@ htmlcov/
 # Generated end to end test data
 my-test-api-client/
 custom-e2e/
+# Created by https://www.toptal.com/developers/gitignore/api/vscode
+# Edit at https://www.toptal.com/developers/gitignore?templates=vscode
+
+### vscode ###
+.vscode/*
+*.code-workspace
+
+# End of https://www.toptal.com/developers/gitignore/api/vscode
+

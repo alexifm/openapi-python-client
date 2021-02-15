@@ -8,7 +8,14 @@ from pydantic import ValidationError
 from .. import schema as oai
 from .. import utils
 from .errors import GeneratorError, ParseError, PropertyError
-from .properties import EnumProperty, ModelProperty, Property, Schemas, build_schemas, property_from_data
+from .properties import (
+    EnumProperty,
+    ModelProperty,
+    Property,
+    Schemas,
+    build_schemas,
+    property_from_data,
+)
 from .reference import Reference
 from .responses import Response, response_from_data
 
@@ -49,18 +56,20 @@ class EndpointCollection:
                 if operation is None:
                     continue
                 tag = (operation.tags or ["default"])[0]
-                collection = endpoints_by_tag.setdefault(tag, EndpointCollection(tag=tag))
+                collection = endpoints_by_tag.setdefault(
+                    tag, EndpointCollection(tag=tag)
+                )
                 endpoint, schemas = Endpoint.from_data(
                     data=operation, path=path, method=method, tag=tag, schemas=schemas
                 )
                 if isinstance(endpoint, ParseError):
-                    endpoint.header = (
-                        f"ERROR parsing {method.upper()} {path} within {tag}. Endpoint will not be generated."
-                    )
+                    endpoint.header = f"ERROR parsing {method.upper()} {path} within {tag}. Endpoint will not be generated."
                     collection.parse_errors.append(endpoint)
                     continue
                 for error in endpoint.errors:
-                    error.header = f"WARNING parsing {method.upper()} {path} within {tag}."
+                    error.header = (
+                        f"WARNING parsing {method.upper()} {path} within {tag}."
+                    )
                     collection.parse_errors.append(error)
                 collection.endpoints.append(endpoint)
 
@@ -104,7 +113,9 @@ class Endpoint:
         """ Return form_body_reference """
         body_content = body.content
         form_body = body_content.get("application/x-www-form-urlencoded")
-        if form_body is not None and isinstance(form_body.media_type_schema, oai.Reference):
+        if form_body is not None and isinstance(
+            form_body.media_type_schema, oai.Reference
+        ):
             return Reference.from_ref(form_body.media_type_schema.ref)
         return None
 
@@ -113,7 +124,9 @@ class Endpoint:
         """ Return form_body_reference """
         body_content = body.content
         json_body = body_content.get("multipart/form-data")
-        if json_body is not None and isinstance(json_body.media_type_schema, oai.Reference):
+        if json_body is not None and isinstance(
+            json_body.media_type_schema, oai.Reference
+        ):
             return Reference.from_ref(json_body.media_type_schema.ref)
         return None
 
@@ -143,30 +156,48 @@ class Endpoint:
         if data.requestBody is None or isinstance(data.requestBody, oai.Reference):
             return endpoint, schemas
 
-        endpoint.form_body_reference = Endpoint.parse_request_form_body(data.requestBody)
+        endpoint.form_body_reference = Endpoint.parse_request_form_body(
+            data.requestBody
+        )
         json_body, schemas = Endpoint.parse_request_json_body(
             body=data.requestBody, schemas=schemas, parent_name=endpoint.name
         )
         if isinstance(json_body, ParseError):
-            return ParseError(detail=f"cannot parse body of endpoint {endpoint.name}", data=json_body.data), schemas
+            return (
+                ParseError(
+                    detail=f"cannot parse body of endpoint {endpoint.name}",
+                    data=json_body.data,
+                ),
+                schemas,
+            )
 
-        endpoint.multipart_body_reference = Endpoint.parse_multipart_body(data.requestBody)
+        endpoint.multipart_body_reference = Endpoint.parse_multipart_body(
+            data.requestBody
+        )
 
         if endpoint.form_body_reference:
             endpoint.relative_imports.add(
-                import_string_from_reference(endpoint.form_body_reference, prefix="...models")
+                import_string_from_reference(
+                    endpoint.form_body_reference, prefix="...models"
+                )
             )
         if endpoint.multipart_body_reference:
             endpoint.relative_imports.add(
-                import_string_from_reference(endpoint.multipart_body_reference, prefix="...models")
+                import_string_from_reference(
+                    endpoint.multipart_body_reference, prefix="...models"
+                )
             )
         if json_body is not None:
             endpoint.json_body = json_body
-            endpoint.relative_imports.update(endpoint.json_body.get_imports(prefix="..."))
+            endpoint.relative_imports.update(
+                endpoint.json_body.get_imports(prefix="...")
+            )
         return endpoint, schemas
 
     @staticmethod
-    def _add_responses(*, endpoint: "Endpoint", data: oai.Responses, schemas: Schemas) -> Tuple["Endpoint", Schemas]:
+    def _add_responses(
+        *, endpoint: "Endpoint", data: oai.Responses, schemas: Schemas
+    ) -> Tuple["Endpoint", Schemas]:
         endpoint = deepcopy(endpoint)
         for code, response_data in data.items():
             if code == "default":
@@ -187,7 +218,10 @@ class Endpoint:
                 continue
 
             response, schemas = response_from_data(
-                status_code=status_code, data=response_data, schemas=schemas, parent_name=endpoint.name
+                status_code=status_code,
+                data=response_data,
+                schemas=schemas,
+                parent_name=endpoint.name,
             )
             if isinstance(response, ParseError):
                 endpoint.errors.append(
@@ -212,6 +246,7 @@ class Endpoint:
         if data.parameters is None:
             return endpoint, schemas
         for param in data.parameters:
+
             if isinstance(param, oai.Reference) or param.param_schema is None:
                 continue
             prop, schemas = property_from_data(
@@ -220,9 +255,16 @@ class Endpoint:
                 data=param.param_schema,
                 schemas=schemas,
                 parent_name=endpoint.name,
+                description=param.description,
             )
             if isinstance(prop, ParseError):
-                return ParseError(detail=f"cannot parse parameter of endpoint {endpoint.name}", data=prop.data), schemas
+                return (
+                    ParseError(
+                        detail=f"cannot parse parameter of endpoint {endpoint.name}",
+                        data=prop.data,
+                    ),
+                    schemas,
+                )
             endpoint.relative_imports.update(prop.get_imports(prefix="..."))
 
             if param.param_in == ParameterLocation.QUERY:
@@ -232,7 +274,12 @@ class Endpoint:
             elif param.param_in == ParameterLocation.HEADER:
                 endpoint.header_parameters.append(prop)
             else:
-                return ParseError(data=param, detail="Parameter must be declared in path or query"), schemas
+                return (
+                    ParseError(
+                        data=param, detail="Parameter must be declared in path or query"
+                    ),
+                    schemas,
+                )
         return endpoint, schemas
 
     @staticmethod
@@ -249,17 +296,25 @@ class Endpoint:
         endpoint = Endpoint(
             path=path,
             method=method,
-            description=utils.remove_string_escapes(data.description) if data.description else "",
+            description=utils.remove_string_escapes(data.description)
+            if data.description
+            else "",
             name=name,
             requires_security=bool(data.security),
             tag=tag,
         )
 
-        result, schemas = Endpoint._add_parameters(endpoint=endpoint, data=data, schemas=schemas)
+        result, schemas = Endpoint._add_parameters(
+            endpoint=endpoint, data=data, schemas=schemas
+        )
         if isinstance(result, ParseError):
             return result, schemas
-        result, schemas = Endpoint._add_responses(endpoint=result, data=data.responses, schemas=schemas)
-        result, schemas = Endpoint._add_body(endpoint=result, data=data, schemas=schemas)
+        result, schemas = Endpoint._add_responses(
+            endpoint=result, data=data.responses, schemas=schemas
+        )
+        result, schemas = Endpoint._add_body(
+            endpoint=result, data=data, schemas=schemas
+        )
 
         return result, schemas
 
@@ -285,9 +340,12 @@ class GeneratorData:
             detail = str(e)
             if "swagger" in d:
                 detail = (
-                    "You may be trying to use a Swagger document; this is not supported by this project.\n\n" + detail
+                    "You may be trying to use a Swagger document; this is not supported by this project.\n\n"
+                    + detail
                 )
-            return GeneratorError(header="Failed to parse OpenAPI document", detail=detail)
+            return GeneratorError(
+                header="Failed to parse OpenAPI document", detail=detail
+            )
         if openapi.openapi.major != 3:
             return GeneratorError(
                 header="openapi-python-client only supports OpenAPI 3.x",
@@ -297,7 +355,9 @@ class GeneratorData:
             schemas = Schemas()
         else:
             schemas = build_schemas(components=openapi.components.schemas)
-        endpoint_collections_by_tag, schemas = EndpointCollection.from_data(data=openapi.paths, schemas=schemas)
+        endpoint_collections_by_tag, schemas = EndpointCollection.from_data(
+            data=openapi.paths, schemas=schemas
+        )
         enums = schemas.enums
 
         return GeneratorData(
