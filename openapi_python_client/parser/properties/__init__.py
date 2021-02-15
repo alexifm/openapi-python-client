@@ -570,7 +570,13 @@ def _property_from_data(
         )
     if not data.type:
         return (
-            NoneProperty(name=name, required=required, nullable=False, default=None),
+            NoneProperty(
+                name=name,
+                required=required,
+                nullable=False,
+                default=None,
+                description=description,
+            ),
             schemas,
         )
 

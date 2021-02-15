@@ -193,8 +193,9 @@ class Project:
         if self.meta == MetaType.SETUP:
             self._build_setup_py()
 
-        # noxfile.py
+        # nox and mkdocs
         self._build_noxfile_py()
+        self._build_mkdocs()
 
         # README.md
         readme = self.project_dir / "README.md"
@@ -233,13 +234,65 @@ class Project:
     def _build_noxfile_py(self) -> None:
         template = "noxfile.py.jinja"
         try:
-            pyproject_template = self.env.get_template(template)
+            nox_template = self.env.get_template(template)
         except TemplateNotFound:
             pass
         else:
-            pyproject_path = self.project_dir / "noxfile.py"
-            pyproject_path.write_text(
-                pyproject_template.render(**self.extra_template_kwargs)
+            nox_path = self.project_dir / "noxfile.py"
+            nox_path.write_text(nox_template.render(**self.extra_template_kwargs))
+
+    def _build_mkdocs(self) -> None:
+        template = "mkdocs.yml.jinja"
+        try:
+            mkdocs_template = self.env.get_template(template)
+        except TemplateNotFound:
+            pass
+        else:
+
+            mkdocs_path = self.project_dir / "mkdocs.yml"
+            mkdocs_path.write_text(
+                mkdocs_template.render(
+                    project_name=self.project_name,
+                    package_name=self.package_name,
+                    version=self.version,
+                    description=self.package_description,
+                    **self.extra_template_kwargs,
+                )
+            )
+
+        template = "index.md.jinja"
+        try:
+            docs_template = self.env.get_template(template)
+        except TemplateNotFound:
+            pass
+        else:
+            (self.project_dir / "docs").mkdir()
+            docs_path = self.project_dir / "docs" / "index.md"
+            docs_path.write_text(
+                docs_template.render(
+                    project_name=self.project_name,
+                    package_name=self.package_name,
+                    version=self.version,
+                    description=self.package_description,
+                    **self.extra_template_kwargs,
+                )
+            )
+
+        template = "api.md.jinja"
+        try:
+            docs_template = self.env.get_template(template)
+        except TemplateNotFound:
+            pass
+        else:
+            docs_path = self.project_dir / "docs" / "api.md"
+            docs_path.write_text(
+                docs_template.render(
+                    project_name=self.project_name,
+                    package_name=self.package_name,
+                    version=self.version,
+                    description=self.package_description,
+                    **self.extra_template_kwargs,
+                )
             )
 
     def _build_setup_py(self) -> None:
